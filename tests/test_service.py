@@ -1,15 +1,18 @@
-from src.service import categorize
+import pytest
+
+from src.service import ServiceUnavailable, categorize
 
 
-def test_budget_exhaustion_returns_mock_result() -> None:
-    """Intentionally stale expectation from the sanitized evidence pack."""
+def test_budget_exhaustion_fails_loudly_and_audits() -> None:
     audit_events: list[str] = []
 
-    result = categorize(
-        {"venue_id": "venue-demo"},
-        automation_budget_reached=True,
-        audit=audit_events.append,
-    )
+    with pytest.raises(ServiceUnavailable, match="automation_budget_stop") as error:
+        categorize(
+            {"venue_id": "venue-demo"},
+            automation_budget_reached=True,
+            audit=audit_events.append,
+        )
 
-    assert result["source"] == "mock"
-
+    assert error.value.code == "automation_budget_stop"
+    assert error.value.retryable is True
+    assert audit_events == ["automation_budget_stop"]
