@@ -2,13 +2,13 @@
 
 **Decision:** No deployment  
 **Next possible stage:** Five-venue controlled pilot  
-**Time spent:** Add the real elapsed time before submission
+**Time spent:** 2 hours 25 minutes
 
 ## Scope and evidence
 
 I did not have access to Gastropilot source code, production settings,
 credentials or customer data. I built a small independent example from the
-sanitized brief. It shows how I would make the release gate fail closed.
+sanitized brief. It shows how I would make the CI workflow fail closed.
 
 I use three evidence labels:
 
@@ -16,22 +16,27 @@ I use three evidence labels:
 - **Demonstrated:** something reproduced or fixed in this repository.
 - **Assumption:** a condition that still needs an owner to approve it.
 
+The plan assumes named owners and a staging environment can be available within
+48 hours, and that five venues can receive useful value from the reduced
+journey. Neither assumption is release evidence; missing confirmation blocks
+the pilot.
+
 This report does not describe Gastropilot's current production system.
 
 ## 1. Incident map
 
-| Finding | Type | Severity | Owner | Confidence |
-|---|---|---:|---|---:|
-| CI hides failures with `|| true`. | Release system | Blocker | Technical lead | High |
-| Auth bypass leaks between tests. | Security and test | Blocker | Security and test owners | High |
-| Code, settings and database version are not matched to the running system. | Release system and owner action | Blocker | Release, infrastructure and database owners | Medium |
-| Integration tests are missing test-only settings. | Release system | High | Platform owner | High |
-| The configured timeout plugin is missing. | Release system | High | Test owner | High |
-| The budget test expects fake data instead of the intended error. | Test | Medium | Service owner | High |
-| Signup and durable onboarding fixes are not merged. | Product | High | Product and engineering owners | Medium |
-| Operational tests use an old request format. | Test | Medium | Service owners | High |
-| Security actions and approvals are incomplete. | Security and owner action | Blocker | Security and company owners | High |
-| Lint debt and the bundle warning are not proven launch failures. | Non-blocking debt | Low | Engineering owners | Medium |
+| Finding | Type | Severity | Owner | Evidence basis | Confidence |
+|---|---|---:|---|---|---:|
+| CI hides failures with `|| true`. | Release-system defect | Blocker | Technical lead | Brief + demonstrated | High |
+| Auth bypass leaks between tests. | Security/compliance blocker + test defect | Blocker | Security and test owners | Brief + demonstrated | High |
+| Code, settings and database version are not matched to the running system. | Release-system defect + external owner action | Blocker | Release, infrastructure and database owners | Brief | Medium |
+| Integration tests are missing test-only settings. | Release-system defect | High | Platform owner | Brief + demonstrated | High |
+| The configured timeout plugin is missing. | Release-system defect | High | Test owner | Brief + demonstrated | High |
+| The budget test expects fake data instead of the intended error. | Test defect | Medium | Service owner | Brief + demonstrated | High |
+| Signup and durable onboarding fixes are not merged. | Product defect | High | Product and engineering owners | Brief | Medium |
+| Operational tests use an old request format. | Test defect | Medium | Service owners | Brief | High |
+| Security actions and approvals are incomplete. | Security/compliance blocker + external owner action | Blocker | Security and company owners | Brief | High |
+| Lint debt and the bundle warning are not proven launch failures. | Non-blocking debt | Low | Engineering owners | Brief | Medium |
 
 ### Three highest-risk blockers
 
@@ -45,13 +50,15 @@ This report does not describe Gastropilot's current production system.
    auth bypass enabled for another test. This can hide an access-control bug.
    See [Evidence B4](#b4-security-test-contamination).
 
-3. **The running system is not matched to the reviewed system.** A green commit
-   does not prove which code, settings or database version is running. It also
-   makes rollback unsafe. This remains unproven because the brief provides no
-   staging evidence.
+3. **Required security and compliance actions are incomplete.** Credential
+   rotation, session invalidation and the named approvals are explicit release
+   conditions. Code changes cannot substitute for dated owner proof.
 
 These issues rank above the stale test, missing timeout plugin and lint backlog
 because they affect the whole release or create direct security and data risk.
+Runtime reconciliation remains mandatory, but it ranks next because the brief
+proves the state is unmatched, not that the running environment is already
+wrong. That is a medium-confidence risk until staging evidence exists.
 
 ## 2. Release decision
 
@@ -172,7 +179,7 @@ Exact reviewed commit
         |
 Clean install from pinned dependencies
         |
-Static checks -> unit and integration tests -> security isolation tests
+Syntax compilation -> unit and integration tests -> security isolation tests
         |
 Build and deploy the same commit to staging
         |
@@ -206,18 +213,33 @@ The remediation:
 - names the known legacy failure `LEGACY-001` without allowing new failures.
 
 The before-and-after screenshots are in
-[Appendix B](#appendix-b-before-and-after-evidence). The exact file changes are
-in [Appendix A](#appendix-a-precise-pseudodiff).
+[Appendix B](#b-before-and-after-evidence). The exact file changes are in
+[Appendix A](#a-precise-pseudodiff).
 
 ### Pass and fail rules
 
 - Install only declared, pinned dependencies.
-- Treat any non-zero static-check result as failure.
+- Treat any non-zero syntax-compilation or required static-analysis result as
+  failure. `compileall` checks syntax; it is not a substitute for the product's
+  real static-analysis gate.
 - Allow only named strict failures; block new failures and unexpected passes.
 - Run security tests alone, in the full suite and in reverse order.
+- Require repository-owner proof that `verify` is a required status check for
+  the release branch. If it can be bypassed, the release remains blocked.
 - Require the staging commit, schema and settings to match the reviewed release.
 - Require included journeys to save and reconcile data.
 - Require active alerts, a rollback owner and a tested rollback.
+
+### Observability and rollback signals
+
+- Stop and roll back on any cross-venue authorization, auth-bypass,
+  request-integrity or unknown-runtime-revision signal.
+- Stop new pilot activity on any data-loss or reconciliation mismatch, failed
+  migration, or workflow that reports success without a durable write.
+- Recovery evidence must show the previous reviewed revision is healthy, schema
+  compatibility is confirmed and affected venue data has been reconciled. The
+  release owner records the decision; security or database owners sign their
+  respective evidence.
 
 ### Verified commands
 
@@ -281,7 +303,7 @@ proved together in staging.
 
 ### Change
 
-The focused patch makes the example release gate fail closed. Blocking CI
+The focused patch makes the example workflow fail closed. Blocking CI
 commands now return their real exit codes. CI uses explicit test-only settings.
 The timeout plugin is pinned and required. Security-test setup is local to one
 test. The budget test now checks the intended error and audit event. The one
@@ -292,13 +314,15 @@ known legacy failure remains visible under `LEGACY-001`.
 - Local full suite: `4 passed, 1 xfailed`.
 - Security tests in reverse order: `2 passed`.
 - Timeout provider: `pytest-timeout 2.4.0` registered.
-- Hosted CI: install, static checks, unit tests and integration tests passed.
+- Hosted CI: install, syntax compilation, unit tests and integration tests
+  passed.
 
 ### Release effect
 
-This patch makes the example gate honest. It does not approve deployment. The
-real release still needs proof for the deployed revision, schema, settings,
-security actions, staging journeys, monitoring and rollback.
+This patch makes the example workflow honest when it runs. It does not prove
+that the workflow is enforced or approve deployment. The real release still
+needs proof for the deployed revision, schema, settings, security actions,
+staging journeys, monitoring and rollback.
 
 ### Rollback
 
@@ -317,7 +341,7 @@ the commits and drafted the report.
 No real credentials, personal data or company source code were requested or
 used.
 
-**Elapsed time:** Add the real value before submission.
+**Elapsed time:** 2 hours 25 minutes.
 
 I stopped at one report, one focused patch and its supporting evidence. I did
 not build a full hospitality product or claim that this example proves
@@ -325,7 +349,9 @@ production readiness.
 
 ---
 
-## Appendix A - Precise pseudodiff
+## Appendix
+
+### A. Precise pseudodiff
 
 The exact review range is:
 
@@ -373,79 +399,82 @@ tests/test_legacy.py
 + mark the known AssertionError as strict LEGACY-001
 ```
 
-## Appendix B - Before-and-after evidence
+### B. Before-and-after evidence
 
-### B1. Failed test hidden by CI
+#### B1. Failed test hidden by CI
 
 The baseline core test fails. The baseline workflow runs the full suite with
 `|| true`, so the hosted job can still report success.
 
 ![Baseline core test failure](docs/test_evidence/failure_hidden_by_ci.png)
 
-### B2. Missing test settings
+#### B2. Missing test settings
 
 The integration test cannot start because the test-only values are missing.
 
 ![Integration collection error](docs/test_evidence/collection_error.png)
 
-### B3. Inactive timeout
+#### B3. Inactive timeout
 
 The test passes, but pytest says that `timeout` is an unknown setting. The
 advertised safety limit is not active.
 
 ![Inactive pytest timeout warning](docs/test_evidence/inactive_timeout.png)
 
-### B4. Security-test contamination
+#### B4. Security-test contamination
 
 The local-auth test passes, then the anonymous-denial test fails because the
 bypass remains enabled in the same test process.
 
 ![Security test contamination](docs/test_evidence/security_test_contamination.png)
 
-### B5. Stale budget contract
+#### B5. Stale budget contract
 
 The service correctly stops with `automation_budget_stop`, but the old test
 expects a mock result.
 
 ![Stale automation budget test](docs/test_evidence/stale_contract.png)
 
-### B6. Unmanaged legacy failure
+#### B6. Unmanaged legacy failure
 
 The legacy request test fails with no named policy to separate it from a new
 regression.
 
 ![Unmanaged legacy failure](docs/test_evidence/unmanaged_legacy.png)
 
-### A1. Full suite passes with one named known failure
+#### A1. Full suite passes with one named known failure
 
 ![Full remediated test suite](docs/test_evidence/z_remediation_full_suite.png)
 
-### A2. Security tests pass in reverse order
+#### A2. Security tests pass in reverse order
 
 ![Remediated security isolation](docs/test_evidence/z_remediation_security_isolation.png)
 
-### A3. Timeout plugin is active
+#### A3. Timeout plugin is active
 
 ![Registered pytest timeout plugin](docs/test_evidence/z_remediation_timeout_active.png)
 
-### A4. Known failure stays visible
+#### A4. Known failure stays visible
 
 `LEGACY-001` appears as an expected failure. Pytest still returns success for
 the declared baseline, while any new failure blocks.
 
 ![Visible strict legacy xfail](docs/test_evidence/z_remediation_legacy_visible.png)
 
-### A5. Hosted CI passes
+#### A5. Hosted CI passes
 
-The hosted job installs dependencies, runs static checks and runs the full test
-suite. Every step is green, and the log shows `4 passed, 1 xfailed`.
+The hosted job installs dependencies, compiles Python syntax and runs the full
+test suite. The captured run used the earlier `Static checks` label; the command
+was `compileall`, so the final workflow names it `Syntax compilation`. Every
+step is green, and the log shows `4 passed, 1 xfailed`.
 
 ![Successful hosted GitHub Actions run](docs/test_evidence/run_github_success.png)
 
-## Appendix C - Remaining risks
+### C. Remaining risks
 
 This example does not prove:
 
+- that the `verify` workflow is enforced as a required release check;
 - which revision is running in a Gastropilot environment;
 - the production database or migration state;
 - credential rotation or session invalidation;
